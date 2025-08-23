@@ -322,24 +322,23 @@ Image Agent APIs → http://localhost:8000/img/docs
 
 <p align="center">
   <a href="https://www.linkedin.com/in/gummala-prashanth-1a34a3273" style="text-decoration:none;">
-    <img src="./content/prashanth.jpg" alt="Gummala Prashanth" width="120" style="border-radius:50%;border:1px solid #ddd;margin:6px;" />
+    <img src="./content/prashanth.jpg" alt="Gummala Prashanth" width="200" style="border-radius:50%;border:1px solid #ddd;margin:6px;" />
     <br/>
-    <sub><b>Gummala Prashanth</b></sub>
+    <sub><b>GUMMALA PRASHANTH</b></sub>
   </a>
   <br/>
   <sub>Founder & Backend Engineer</sub>
   <br/>
-  <a href="mailto:gummalaprashanth509@gmail.com">gummalaprashanth509@gmail.com</a>
 </p>
 
 <p align="center">
   <a href="#" style="text-decoration:none;">
-    <img src="./content/bhaskar.jpg" alt="Bhaskar" width="120" style="border-radius:50%;border:1px solid #ddd;margin:6px;" />
+    <img src="./content/bhaskar.jpg" alt="Bhaskar" width="200" style="border-radius:50%;border:1px solid #ddd;margin:6px;" />
     <br/>
-    <sub><b>Bhaskar</b></sub>
+    <sub><b>GODITI BHASKAR</b></sub>
   </a>
   <br/>
-  <sub>Co-Contributor</sub>
+  <sub>Co-Devloper</sub>
 </p>
 
 

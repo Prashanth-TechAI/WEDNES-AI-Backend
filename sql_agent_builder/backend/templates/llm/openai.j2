@@ -1,0 +1,10 @@
+# openai.j2
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="{{ config.llm_key }}",
+    base_url="https://api.openai.com/v1"
+)
+
+MODEL_NAME = "{{ config.llm_model }}"

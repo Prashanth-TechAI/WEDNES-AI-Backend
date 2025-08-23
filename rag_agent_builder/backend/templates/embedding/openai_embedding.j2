@@ -1,0 +1,44 @@
+{% raw %}
+import os
+import openai
+from dotenv import load_dotenv
+from typing import List
+
+load_dotenv()
+
+class OpenAIEmbeddingModel:
+    def __init__(self):
+        # Ensure your .env has OPENAI_API_KEY set
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        if not openai.api_key:
+            raise RuntimeError("OPENAI_API_KEY must be set to use OpenAI embeddings")
+        self.model_name = "{{ config.embedding.model_name }}"
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """
+        Request embeddings for a list of documents (texts). In v1+:
+          openai.embeddings.create(model=..., input=[...])
+        returns a JSON whose "data" is a list of { "embedding": [...], ... }.
+
+        We extract each embedding vector and return as a List[List[float]].
+        """
+        response = openai.embeddings.create(
+            model=self.model_name,
+            input=texts
+        )
+        return [item.embedding for item in response.data]
+
+    def embed_query(self, text: str) -> List[float]:
+        """
+        Request embedding for a single query string.
+        We pass the string as input=text (will be internally wrapped into a list).
+        """
+        response = openai.embeddings.create(
+            model=self.model_name,
+            input=text
+        )
+        return response.data[0].embedding
+
+# Instantiate as embedding_model so that combined/main.py.j2 or your UI code can refer to it directly
+embedding_model = OpenAIEmbeddingModel()
+{% endraw %}

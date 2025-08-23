@@ -1,0 +1,89 @@
+{% raw %}
+import os, sys, types, logging
+from dotenv import load_dotenv
+load_dotenv()
+logging.basicConfig(level=logging.INFO)
+
+# === Load data ===
+from source import load_data
+
+# === Embedding model ===
+from embedding_model import embedding_model
+
+# === Vector store ===
+from vector_db import upsert_texts, retrieve, bootstrap as vector_bootstrap
+
+# === LLM ===
+from llm import ask_llm
+
+# === System prompt ===
+try:
+    from system_prompt import SYSTEM_PROMPT
+except ImportError:
+    SYSTEM_PROMPT = "You are a helpful AI assistant."
+
+# === UI ===
+try:
+    import streamlit as st
+    UI_TYPE = "streamlit"
+except ImportError:
+    try:
+        import gradio as gr
+        UI_TYPE = "gradio"
+    except ImportError:
+        UI_TYPE = "unknown"
+
+# === Bootstrap Vector Store (if needed) ===
+vector_bootstrap(lambda: load_data(chunk_size=100))
+
+
+# === RAG function ===
+def run_query(question: str) -> str:
+    context_chunks = retrieve(question)
+    context = "\n\n".join(context_chunks) if isinstance(context_chunks, list) else str(context_chunks)
+    return ask_llm(SYSTEM_PROMPT, context, question)
+
+    {% raw %}
+    # [imports skipped]
+    
+    # === UI detection ===
+    try:
+        import streamlit as st
+        UI_TYPE = "streamlit"
+    except ImportError:
+        try:
+            import gradio as gr
+            UI_TYPE = "gradio"
+        except ImportError:
+            UI_TYPE = "unknown"
+    
+    # === run_query defined earlier ===
+    
+    if UI_TYPE == "streamlit":
+        st.set_page_config(page_title="RAG Chatbot", layout="centered")
+        st.title("RAG Chatbot")
+        question = st.text_area("Ask your data question:")
+        if st.button("Execute") and question:
+            with st.spinner("Generating response..."):
+                try:
+                    result = run_query(question)
+                    st.success("Results:")
+                    st.write(result)
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+                    st.code(str(e), language="text")
+    
+    elif UI_TYPE == "gradio":
+        def gradio_handler(q):
+            try:
+                return run_query(q)
+            except Exception as e:
+                return f"Error: {e}"
+    
+        iface = gr.Interface(fn=gradio_handler, inputs="text", outputs="text", title="RAG Chatbot")
+        iface.launch(server_port=7860, server_name="0.0.0.0")
+    
+    else:
+        print("No supported UI framework (streamlit or gradio) is installed.")
+    {% endraw %}
+    

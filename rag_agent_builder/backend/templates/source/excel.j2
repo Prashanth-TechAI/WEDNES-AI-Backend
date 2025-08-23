@@ -1,0 +1,17 @@
+import pandas as pd
+
+def load_data():
+    try:
+        df = pd.read_excel("data.xlsx", engine="openpyxl")
+        df = df.fillna("").astype(str)
+
+        # Flatten each row into a single string
+        rows = df.apply(lambda row: " ".join(row), axis=1).tolist()
+
+        # Chunk rows (e.g., 100 rows per chunk)
+        chunk_size = 100
+        chunks = [" ".join(rows[i:i + chunk_size]) for i in range(0, len(rows), chunk_size)]
+
+        return chunks
+    except Exception as e:
+        raise Exception(f"Error reading Excel file: {str(e)}")

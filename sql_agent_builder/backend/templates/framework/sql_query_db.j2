@@ -1,0 +1,79 @@
+import os
+import pandas as pd
+from dotenv import load_dotenv
+from prompt import SYSTEM_PROMPT
+from {{ config.llm_provider }} import generate_response
+
+{% if config.ui == "streamlit" %}
+import streamlit as st
+{% elif config.ui == "gradio" %}
+import gradio as gr
+{% endif %}
+
+import sqlalchemy
+
+# === Load env ===
+load_dotenv()
+
+def connect_engine():
+    db_type = "{{ config.source_type }}"
+    if db_type == "postgres":
+        url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    elif db_type == "mysql":
+        url = f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    else:
+        raise ValueError("Unsupported DB type")
+    return sqlalchemy.create_engine(url)
+
+def get_schema(engine, table: str) -> str:
+    df = pd.read_sql(f"SELECT * FROM {table} LIMIT 1", engine)
+    return "Table: " + table + "\nColumns:\n" + "\n".join(
+        [f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes)]
+    )
+
+def generate_sql(user_query: str, schema: str) -> str:
+    prompt = f"""{SYSTEM_PROMPT}
+
+{schema}
+
+User Question:
+{user_query}
+
+SQL Query:"""
+    return generate_response(prompt).strip()
+
+def run_agent(question):
+    engine = connect_engine()
+    table = "{{ config.source_details.table_name }}"
+    schema = get_schema(engine, table)
+    sql = generate_sql(question, schema)
+    try:
+        return pd.read_sql(sql, engine)
+    except Exception as e:
+        return pd.DataFrame([{"error": str(e)}])
+
+# === Streamlit UI ===
+{% if config.ui == "streamlit" %}
+def main():
+    st.title("SQL Agent (DB Source)")
+    question = st.text_input("Ask your database question:")
+    if st.button("Run"):
+        result = run_agent(question)
+        st.dataframe(result)
+
+if __name__ == "__main__":
+    main()
+{% endif %}
+
+# === Gradio UI ===
+{% if config.ui == "gradio" %}
+def ask(q):
+    result = run_agent(q)
+    return result.to_markdown()
+
+def start_ui():
+    gr.Interface(fn=ask, inputs="text", outputs="markdown", title="SQL Agent (DB)").launch()
+
+if __name__ == "__main__":
+    start_ui()
+{% endif %}

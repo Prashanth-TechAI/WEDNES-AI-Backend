@@ -1,0 +1,30 @@
+import pandas as pd
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+def chunk_text(text, chunk_size=100):
+    words = text.split()
+    return [" ".join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
+
+def load_data(file_path="data.csv", chunk_size=100):
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8')
+        if df.empty:
+            raise ValueError("CSV file is empty.")
+        df = df.fillna("").astype(str)
+        combined_rows = df.apply(lambda row: " ".join(row), axis=1)
+        chunks = []
+        for i, text in enumerate(combined_rows):
+            text_chunks = chunk_text(text, chunk_size=chunk_size)
+            chunks.extend(text_chunks)
+
+        logging.info(f"Loaded {len(df)} rows from CSV.")
+        logging.info(f"Generated {len(chunks)} text chunks from rows.")
+
+        return chunks
+
+    except FileNotFoundError:
+        raise Exception(f"CSV file '{file_path}' not found.")
+    except Exception as e:
+        raise Exception(f"Error loading CSV: {str(e)}")

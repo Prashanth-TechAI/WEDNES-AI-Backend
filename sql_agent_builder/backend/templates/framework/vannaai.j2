@@ -1,0 +1,114 @@
+import os
+import pandas as pd
+import streamlit as st
+from dotenv import load_dotenv
+from vanna.openai import OpenAI_Chat
+from vanna.chromadb import ChromaDB_VectorStore
+
+load_dotenv()
+st.set_page_config(page_title="Vanna AI", layout="wide")
+
+# === Vanna Class ===
+class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
+    def __init__(self, config=None):
+        ChromaDB_VectorStore.__init__(self, config=config)
+        OpenAI_Chat.__init__(self, config=config)
+        self._last_query_df = None
+
+    def ask(self, question, df=None, **kwargs):
+        sql, result_df, _ = super().ask(question, df=df, **kwargs)
+        self._last_query_df = result_df
+        return result_df, sql
+
+vn = MyVanna(config={
+    'api_key': os.getenv("OPENAI_API_KEY"),
+    'model': os.getenv("MODEL_NAME", "gpt-4o"),
+    'embedding_model': 'text-embedding-3-small'
+})
+
+# === Load Data from Any Source ===
+@st.cache_data
+def load_data():
+    source_type = os.getenv("SOURCE_TYPE", "").lower()
+
+    if source_type == "csv":
+        return pd.read_csv(os.getenv("FILE_PATH"))
+    elif source_type == "excel":
+        return pd.read_excel(os.getenv("FILE_PATH"))
+    elif source_type == "sqlite":
+        import sqlite3
+        conn = sqlite3.connect(os.getenv("SQLITE_PATH"))
+        return pd.read_sql("SELECT * FROM data", conn)
+    elif source_type == "postgres":
+        vn.connect_to_postgres(
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT", 5432)),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
+        return vn.run_sql("SELECT * FROM data LIMIT 1000")
+    elif source_type == "mysql":
+        vn.connect_to_mysql(
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT", 3306)),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
+        return vn.run_sql("SELECT * FROM data LIMIT 1000")
+    else:
+        raise ValueError("Unsupported or missing SOURCE_TYPE in .env")
+
+df = load_data()
+
+# === Train Schema ===
+@st.cache_data
+def train_schema(df: pd.DataFrame):
+    try:
+        doc = "Table 'data' has the following columns: " + ", ".join(
+            [f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes)]
+        ) + "."
+        vn.train(documentation=doc)
+
+        # Optional examples
+        if {"client_name", "billed_amount"}.issubset(df.columns):
+            vn.train(
+                sql="SELECT client_name, SUM(billed_amount) FROM data GROUP BY client_name;",
+                question="What is the total billed amount for each client?"
+            )
+
+        if {"collected_amount", "billed_amount"}.issubset(df.columns):
+            vn.train(
+                sql="SELECT * FROM data WHERE collected_amount < 0.9 * billed_amount;",
+                question="Which records have collected amount less than 90% of billed amount?"
+            )
+
+        if "underbilling_flag" in df.columns:
+            vn.train(documentation="The 'underbilling_flag' column indicates whether a record is underbilled.")
+
+        return True
+    except Exception as e:
+        st.error(f"Training failed: {e}")
+        return False
+
+train_schema(df)
+
+# === Streamlit UI ===
+st.title("📊 Vanna AI Data Chatbot")
+st.write("Query your `data` table below:")
+
+question = st.text_input("💬 Enter your question")
+
+if st.button("Ask") and question:
+    with st.spinner("Thinking..."):
+        try:
+            result_df, sql = vn.ask(question, df=df)
+            st.code(sql, language="sql")
+
+            if result_df is not None and not result_df.empty:
+                st.dataframe(result_df)
+            else:
+                st.warning("No results found.")
+        except Exception as e:
+            st.error(f"Error: {e}")

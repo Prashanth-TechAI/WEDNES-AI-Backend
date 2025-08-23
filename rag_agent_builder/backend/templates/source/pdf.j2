@@ -1,0 +1,13 @@
+import fitz  # PyMuPDF
+
+def load_data():
+    try:
+        doc = fitz.open("data.pdf")
+        text = ""
+        for page in doc:
+            text += page.get_text()
+        return text
+    except FileNotFoundError:
+        raise Exception("PDF file not found.")
+    except Exception as e:
+        raise Exception(f"Error reading PDF: {str(e)}")

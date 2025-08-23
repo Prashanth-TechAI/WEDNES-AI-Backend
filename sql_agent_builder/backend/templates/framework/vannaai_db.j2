@@ -1,0 +1,131 @@
+import os
+import pandas as pd
+from dotenv import load_dotenv
+from vanna.openai import OpenAI_Chat
+from vanna.chromadb import ChromaDB_VectorStore
+import psycopg2
+from psycopg2 import OperationalError
+
+{% if config.ui == "streamlit" %}
+import streamlit as st
+{% elif config.ui == "gradio" %}
+import gradio as gr
+{% endif %}
+
+import sqlalchemy
+from sqlalchemy import text
+
+# === Load environment variables ===
+load_dotenv()
+
+# === Vanna AI Setup ===
+class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
+    def __init__(self, config=None):
+        ChromaDB_VectorStore.__init__(self, config=config)
+        OpenAI_Chat.__init__(self, config=config)
+
+vn = MyVanna(config={
+    'api_key': os.getenv("LLM_API_KEY"),
+    'model': os.getenv("MODEL_NAME", "gpt-4o"),
+    'embedding_model': 'text-embedding-3-small'
+})
+
+# === Connect to DB and Train Vanna ===
+def connect_and_train():
+    db_type = "{{ config.source_type }}"
+    table_name = "{{ config.source_details.table_name }}"
+
+    if db_type == "postgres":
+        vn.connect_to_postgres(
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT", 5432)),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
+        engine_url = f"postgresql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    elif db_type == "mysql":
+        vn.connect_to_mysql(
+            host=os.getenv("DB_HOST"),
+            port=int(os.getenv("DB_PORT", 3306)),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD")
+        )
+        engine_url = f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
+    else:
+        raise ValueError(f"Unsupported DB type: {db_type}")
+
+    try:
+        engine = sqlalchemy.create_engine(engine_url)
+        with engine.connect() as conn:
+            df = pd.read_sql(text(f"SELECT * FROM {table_name} LIMIT 5"), conn)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load schema from DB: {e}")
+
+    # Train Vanna with table schema
+    schema = f"Table '{table_name}' has the following columns:\n" + "\n".join(
+        [f"- {col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes)]
+    )
+    vn.train(documentation=schema)
+
+    return df, engine_url
+
+# === Run Query with Vanna ===
+def run_agent(question, engine_url):
+    try:
+        sql = vn.generate_sql(question)
+        if not sql.strip().lower().startswith("select"):
+            return pd.DataFrame([{"info": f"Generated non-SELECT SQL: {sql}"}])
+        engine = sqlalchemy.create_engine(engine_url)
+        with engine.connect() as conn:
+            return pd.read_sql(text(sql), conn)
+    except Exception as e:
+        return pd.DataFrame([{"error": f"{str(e)}"}])
+
+# === Streamlit UI ===
+{% if config.ui == "streamlit" %}
+def main():
+    st.set_page_config(page_title="AI SQL Agent", layout="wide")
+    st.title("Chat with Your Database")
+
+    try:
+        df, engine_url = connect_and_train()
+        st.subheader("Schema Preview")
+        st.dataframe(df)
+
+        question = st.text_input("Ask a question about your data:")
+        if question and st.button("Run Query"):
+            with st.spinner("Generating and executing SQL..."):
+                result = run_agent(question, engine_url)
+                if isinstance(result, pd.DataFrame):
+                    st.success("Results:")
+                    st.dataframe(result)
+                else:
+                    st.warning(str(result))
+    except Exception as e:
+        st.error(f"Failed to initialize agent:\n{e}")
+
+if __name__ == "__main__":
+    main()
+{% endif %}
+
+# === Gradio UI ===
+{% if config.ui == "gradio" %}
+def ask_question(question):
+    try:
+        df, engine_url = connect_and_train()
+        result = run_agent(question, engine_url)
+        if isinstance(result, pd.DataFrame):
+            return result.to_markdown(index=False)
+        return str(result)
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def start_ui():
+    iface = gr.Interface(fn=ask_question, inputs="text", outputs="markdown", title="Vanna AI SQL Agent")
+    iface.launch(server_port=7860, server_name="0.0.0.0", share=False)
+
+if __name__ == "__main__":
+    start_ui()  
+{% endif %}

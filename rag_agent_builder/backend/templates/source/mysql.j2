@@ -1,0 +1,25 @@
+import pandas as pd
+import mysql.connector
+from mysql.connector import Error
+
+def load_data():
+    try:
+        conn = mysql.connector.connect(
+            host="{{ config.source.host }}",
+            database="{{ config.source.dbname }}",
+            user="{{ config.source.user }}",
+            password="{{ config.source.password }}",
+            port={{ config.source.port }}
+        )
+        query = "SELECT * FROM {{ config.source.table }} LIMIT 1000"
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+        df = pd.DataFrame(rows, columns=columns)
+        return " ".join(map(str, df.fillna("").values.flatten()))
+    except Error as e:
+        raise Exception(f"MySQL connection failed: {str(e)}")
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            conn.close()

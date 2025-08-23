@@ -1,0 +1,21 @@
+import pandas as pd
+import psycopg2
+from psycopg2 import OperationalError
+
+def load_data():
+    try:
+        conn = psycopg2.connect(
+            host="{{ config.source.host }}",
+            dbname="{{ config.source.dbname }}",
+            user="{{ config.source.user }}",
+            password="{{ config.source.password }}",
+            port={{ config.source.port or 5432 }}
+        )
+        query = 'SELECT * FROM "{{ config.source.table }}" LIMIT 1000'
+        df = pd.read_sql(query, conn)
+        return " ".join(map(str, df.fillna("").values.flatten()))
+    except OperationalError as e:
+        raise Exception(f"PostgreSQL connection failed: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()

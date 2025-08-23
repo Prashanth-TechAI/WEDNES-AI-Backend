@@ -1,0 +1,9 @@
+import gradio as gr
+
+def ask_question(q):
+    df = load_data()
+    return run_query(df, q)
+
+def start_ui():
+    iface = gr.Interface(fn=ask_question, inputs="text", outputs="text", title="AI SQL Agent")
+    iface.launch(server_port=7860, server_name="0.0.0.0", share=False)  # 👈 Add this line

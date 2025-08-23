@@ -1,0 +1,84 @@
+from uuid import uuid4
+from typing import List
+from sentence_transformers import SentenceTransformer
+from pymilvus import Collection, CollectionSchema, FieldSchema, DataType, connections, utility
+
+# === Config ===
+MILVUS_HOST       = "{{ config.vector_store.url.split('//')[-1].split(':')[0] }}"
+MILVUS_PORT       = int("{{ config.vector_store.url.split(':')[-1] }}")
+COLLECTION_NAME   = "{{ config.vector_store.collection_name }}"
+DISTANCE_METRIC   = "{{ config.vector_store.distance_metric | upper }}"
+DIMENSION         = int({{ config.vector_store.dimensions }})
+MODEL_NAME        = "{{ config.embedding.model_name }}"
+
+# === Embedding Model ===
+class EmbeddingModel:
+    def __init__(self):
+        self.model = SentenceTransformer(MODEL_NAME)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.model.encode(texts, convert_to_numpy=True).tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        return self.model.encode([text], convert_to_numpy=True)[0].tolist()
+
+embedding_model = EmbeddingModel()
+
+# === Milvus Vector Store ===
+class MilvusStore:
+    def __init__(self):
+        connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
+        self.collection_name = COLLECTION_NAME
+        self._ensure_collection()
+        self.collection = Collection(self.collection_name)
+        self.collection.load()
+
+    def _ensure_collection(self):
+        if not utility.has_collection(self.collection_name):
+            schema = CollectionSchema(
+                fields=[
+                    FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, auto_id=False, max_length=64),
+                    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIMENSION),
+                    FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535)
+                ],
+                description="RAG collection"
+            )
+            collection = Collection(name=self.collection_name, schema=schema)
+            index_params = {
+                "index_type": "IVF_FLAT",
+                "metric_type": DISTANCE_METRIC,
+                "params": {"nlist": 128}
+            }
+            collection.create_index(field_name="embedding", index_params=index_params)
+
+    def upsert(self, texts: List[str]):
+        vectors = embedding_model.embed_documents(texts)
+        ids = [str(uuid4()) for _ in texts]
+        entities = [ids, vectors, texts]
+        self.collection.insert(entities)
+
+    def query(self, embedding: List[float], top_k: int = 5) -> List[str]:
+        search_params = {
+            "metric_type": DISTANCE_METRIC,
+            "params": {"nprobe": 10}
+        }
+        results = self.collection.search(
+            data=[embedding],
+            anns_field="embedding",
+            param=search_params,
+            limit=top_k,
+            output_fields=["text"]
+        )
+        return [hit.entity.get("text") for hit in results[0]]
+
+    def describe_index_stats(self):
+        return {
+            "collection_name": self.collection_name,
+            "is_loaded": self.collection.is_loaded,
+            "num_entities": self.collection.num_entities
+        }
+
+    def delete_index(self):
+        self.collection.drop()
+
+vector_store = MilvusStore()

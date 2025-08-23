@@ -1,0 +1,43 @@
+# gemini.j2
+
+import requests
+import json
+
+def generate_response(prompt: str) -> str:
+    """
+    Generic function to send a prompt to Gemini and return its response.
+    """
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
+    }
+
+    # Use dynamically injected config values
+    url = (
+        "https://generativelanguage.googleapis.com/v1/models/"
+        "{{ config.llm_model }}:generateContent?key={{ config.llm_key }}"
+    )
+
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+
+    if response.status_code != 200:
+        try:
+            error_msg = response.json().get("error", {}).get("message", "Unknown error")
+        except Exception:
+            error_msg = response.text
+        raise RuntimeError(f"Gemini API call failed ({response.status_code}): {error_msg}")
+
+    try:
+        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        raise RuntimeError("Gemini response parsing failed.")

@@ -1,0 +1,14 @@
+import requests
+
+def call_groq_api(prompt):
+    headers = {
+        "Authorization": "Bearer {{ config.llm_key }}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "{{ config.llm_model }}",
+        "prompt": prompt,
+        "max_tokens": 256
+    }
+    response = requests.post("https://api.groq.com/openai/v1/completions", json=data, headers=headers)
+    return response.json().get("choices", [{}])[0].get("text", "")

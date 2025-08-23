@@ -1,0 +1,110 @@
+import os
+import pandas as pd
+import sqlite3
+from dotenv import load_dotenv
+from prompt import SYSTEM_PROMPT
+from {{ config.llm_provider }} import generate_response
+
+{% if config.ui == "streamlit" %}
+import streamlit as st
+{% elif config.ui == "gradio" %}
+import gradio as gr
+{% endif %}
+
+# === Load environment ===
+load_dotenv()
+
+def load_data():
+    file_path = os.getenv("FILE_PATH", "data.csv")
+    source_type = "{{ config.source_type }}"
+
+    if source_type == "csv":
+        df = pd.read_csv(file_path)
+    elif source_type == "excel":
+        df = pd.read_excel(file_path, engine="openpyxl")
+    elif source_type == "sqlite":
+        conn = sqlite3.connect(file_path)
+        df = pd.read_sql("SELECT * FROM data", conn)
+        conn.close()
+    else:
+        raise ValueError(f"Unsupported source type: {source_type}")
+    return df
+
+def infer_schema(df: pd.DataFrame) -> str:
+    return "Table: data\nColumns:\n" + "\n".join(
+        [f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes)]
+    )
+
+def generate_sql(user_query: str, schema: str) -> str:
+    prompt = f"""{SYSTEM_PROMPT}
+
+{schema}
+
+User Question:
+{user_query}
+
+SQL Query:"""
+    return generate_response(prompt).strip()
+
+def explain_result(user_question: str, sql: str, result_df: pd.DataFrame) -> str:
+    prompt = f"""
+You are a helpful assistant. The user asked:
+
+{user_question}
+
+The SQL used:
+{sql}
+
+The result:
+{result_df.head(5).to_markdown(index=False)}
+
+Give a brief explanation in simple terms:
+"""
+    return generate_response(prompt).strip()
+
+def run_agent(df, question):
+    schema = infer_schema(df)
+    sql = generate_sql(question, schema)
+
+    try:
+        conn = sqlite3.connect(":memory:")
+        df.to_sql("data", conn, index=False, if_exists="replace")
+        result_df = pd.read_sql_query(sql, conn)
+        explanation = explain_result(question, sql, result_df)
+        return result_df, sql, explanation
+    except Exception as e:
+        return pd.DataFrame([{"error": str(e)}]), sql, f"Error: {str(e)}"
+
+{% if config.ui == "streamlit" %}
+# === Streamlit UI ===
+def main():
+    st.title("SQL Agent (File Source)")
+    question = st.text_input("Ask your data question:")
+    if st.button("Run") and question:
+        df = load_data()
+        result_df, sql, explanation = run_agent(df, question)
+
+        st.subheader("Generated SQL")
+        st.code(sql, language="sql")
+
+        st.subheader("Query Result")
+        st.dataframe(result_df)
+
+        st.subheader("Explanation")
+        st.write(explanation)
+
+if __name__ == "__main__":
+    main()
+{% elif config.ui == "gradio" %}
+# === Gradio UI ===
+def ask(q):
+    if not q.strip():
+        return "Please enter a valid question."
+    df = load_data()
+    result_df, sql, explanation = run_agent(df, q)
+
+    markdown = f"""
+### SQL Query:
+```sql
+{sql}
+{% endif %}

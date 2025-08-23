@@ -1,0 +1,14 @@
+import pandas as pd
+import sqlite3
+
+def load_data():
+    try:
+        conn = sqlite3.connect("{{ config.source.path }}")
+        query = "SELECT * FROM {{ config.source.table }} LIMIT 1000"
+        df = pd.read_sql(query, conn)
+        return df
+    except Exception as e:
+        raise Exception(f"SQLite connection failed: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()

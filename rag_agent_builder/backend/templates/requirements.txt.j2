@@ -1,0 +1,58 @@
+{% raw %}
+# Base requirements
+python-dotenv
+requests
+
+# — UI libraries —#
+{% if config.ui.type == "streamlit" %}
+streamlit
+{% elif config.ui.type == "gradio" %}
+gradio
+{% endif %}
+
+# — Source libraries —#
+{% if config.source.type == "pdf" %}
+PyMuPDF
+{% elif config.source.type in ["csv", "xls", "xlsx"] %}
+pandas
+openpyxl
+{% elif config.source.type == "sqlite" %}
+# sqlite3 is built into the Python stdlib—no extra package needed
+{% elif config.source.type == "postgres" %}
+psycopg2-binary
+{% elif config.source.type == "mysql" %}
+mysql-connector-python
+{% elif config.source.type == "mongo" %}
+pymongo
+{% endif %}
+
+# — Embedding libraries —#
+{% if config.embedding.type == "sentence_transformers" %}
+sentence-transformers
+{% elif config.embedding.type == "openai" %}
+openai
+{% endif %}
+
+# — Vector‐store libraries —#
+{% if config.vector_store.type == "qdrant" %}
+qdrant-client
+{% elif config.vector_store.type == "pinecone" %}
+pinecone
+{% elif config.vector_store.type == "milvus" %}
+pymilvus
+{% elif config.vector_store.type == "faiss" %}
+faiss-cpu
+numpy
+{% elif config.vector_store.type == "chromadb" %}
+chromadb
+{% endif %}
+
+# — LLM libraries —#
+{% if config.llm.type in ["openai_chat", "openai"] %}
+openai
+{% elif config.llm.type == "gemini" %}
+google-cloud-aiplatform  # (or whatever the Gemini client requires
+{% endif %}
+
+# — If you want logger / typing extras, you can add them here —
+{% endraw %}

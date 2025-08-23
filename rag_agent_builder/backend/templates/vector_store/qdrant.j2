@@ -1,0 +1,69 @@
+from uuid import uuid4
+from typing import List
+from sentence_transformers import SentenceTransformer
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams, PointStruct
+
+# === Config ===
+QDRANT_URL        = "{{ config.vector_store.url }}"
+COLLECTION_NAME   = "{{ config.vector_store.collection_name }}"
+DISTANCE_METRIC   = "{{ config.vector_store.distance_metric | upper }}"
+DIMENSION         = int({{ config.vector_store.dimensions }})
+MODEL_NAME        = "{{ config.embedding.model_name }}"
+
+# === Embedding Model ===
+class EmbeddingModel:
+    def __init__(self):
+        self.model = SentenceTransformer(MODEL_NAME)
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        return self.model.encode(texts, convert_to_numpy=True).tolist()
+
+    def embed_query(self, text: str) -> List[float]:
+        return self.model.encode([text], convert_to_numpy=True)[0].tolist()
+
+embedding_model = EmbeddingModel()
+
+# === Qdrant Vector Store ===
+class QdrantStore:
+    def __init__(self):
+        self.client = QdrantClient(url=QDRANT_URL)
+        self.collection_name = COLLECTION_NAME
+        self.distance = Distance[DISTANCE_METRIC]
+        self._ensure_collection()
+
+    def _ensure_collection(self):
+        if not self.client.collection_exists(self.collection_name):
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                vectors_config=VectorParams(size=DIMENSION, distance=self.distance)
+            )
+
+    def upsert(self, texts: List[str]):
+        vectors = embedding_model.embed_documents(texts)
+        points = [
+            PointStruct(id=str(uuid4()), vector=v, payload={"text": t})
+            for v, t in zip(vectors, texts)
+        ]
+        self.client.upsert(collection_name=self.collection_name, points=points)
+
+    def query(self, embedding: List[float], top_k: int = 5) -> List[str]:
+        results = self.client.search(
+            collection_name=self.collection_name,
+            query_vector=embedding,
+            limit=top_k,
+            with_payload=True
+        )
+        return [r.payload["text"] for r in results]
+
+    def describe_index_stats(self):
+        info = self.client.get_collection(self.collection_name)
+        return {
+            "status": getattr(info, "status", "unknown"),
+            "vectors_count": getattr(info, "vectors_count", 0)
+        }
+
+    def delete_index(self):
+        self.client.delete_collection(self.collection_name)
+
+vector_store = QdrantStore()

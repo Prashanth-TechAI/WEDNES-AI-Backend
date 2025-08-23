@@ -1,0 +1,66 @@
+# === vector_store/faiss.j2 ===
+import faiss
+import numpy as np
+
+class FaissVectorStore:
+    def __init__(self):
+        # We'll build an IndexFlatIP for cosine-similarity (while normalizing vectors)
+        self.dimension = {{ config.vector_store.dimension }}
+        # Because we want to do cosine, we normalize vectors to unit length
+        self.index = faiss.IndexFlatIP(self.dimension)
+        # Keep an in‐memory mapping from vector index → (id, payload)
+        self.id_to_text = {}
+        self.next_internal_id = 0
+
+    def create_collection(self):
+        # For FAISS, the index is already created in __init__
+        pass
+
+    def upsert(self, points):
+        """
+        points: list of {"id": str, "vector": List[float], "payload": {"text": "..."}}
+        We convert each vector to a NumPy array, normalize it, then add to index.
+        """
+        vectors = []
+        for p in points:
+            vec = np.array(p["vector"], dtype="float32")
+            # Normalize to unit length
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec = vec / norm
+            else:
+                # Avoid division by zero
+                vec = vec
+            vectors.append(vec)
+            self.id_to_text[self.next_internal_id] = (p["id"], p["payload"]["text"])
+            self.next_internal_id += 1
+
+        if vectors:
+            # Stack into a single array of shape (n, dim)
+            array = np.vstack(vectors)
+            self.index.add(array)
+
+    def search(self, query_vector, limit=5):
+        """
+        query_vector: List[float]
+        limit: top_k
+        returns: List[{"id": str, "score": float, "payload": {"text": str}}]
+        """
+        import numpy as np
+        qv = np.array(query_vector, dtype="float32")
+        norm = np.linalg.norm(qv)
+        if norm > 0:
+            qv = qv / norm
+
+        qv = np.expand_dims(qv, axis=0)  # shape (1, dim)
+        distances, indices = self.index.search(qv, limit)  # distances = [ [score1, score2, …] ]
+
+        hits = []
+        for dist, idx in zip(distances[0], indices[0]):
+            if idx < 0:
+                continue
+            orig_id, text = self.id_to_text.get(idx, (None, ""))
+            hits.append({"id": orig_id, "score": float(dist), "payload": {"text": text}})
+        return hits
+
+vector_store = FaissVectorStore()

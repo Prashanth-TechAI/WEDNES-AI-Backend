@@ -1,0 +1,25 @@
+import pandas as pd
+import mysql.connector
+from mysql.connector import Error
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def load_data():
+    try:
+        conn = mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            database=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            port=int(os.getenv("DB_PORT", 3306))
+        )
+        query = "SELECT * FROM {{ config.source_details.table_name }} LIMIT 1000"
+        df = pd.read_sql(query, conn)
+        return df
+    except Error as e:
+        raise Exception(f"MySQL connection failed: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()

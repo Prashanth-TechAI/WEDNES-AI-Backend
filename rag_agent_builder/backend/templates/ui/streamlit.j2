@@ -1,0 +1,17 @@
+
+import streamlit as st
+from framework import run_query
+
+def start_ui():
+    st.title("{{ config.agent_name | default('RAG Agent') }}")
+    
+    question = st.text_area("Ask your data question:")
+    if st.button("Execute"):
+        with st.spinner("Generating response..."):
+            try:
+                result = run_query(question)
+                st.success("Results:")
+                st.dataframe(result)
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+                st.code(str(e), language='text')

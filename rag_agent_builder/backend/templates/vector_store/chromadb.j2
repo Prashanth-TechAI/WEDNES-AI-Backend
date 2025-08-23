@@ -1,0 +1,42 @@
+import os
+import uuid
+from typing import List
+import chromadb
+from sentence_transformers import SentenceTransformer
+
+CHROMA_PATH = "{{ config.vector_store.url | replace('http://', '') | replace('https://', '') }}"
+COLLECTION_NAME = "{{ config.vector_store.collection_name }}"
+DISTANCE_METRIC = "{{ config.vector_store.distance_metric | default('cosine') }}"
+MODEL_NAME = "{{ config.embedding.model_name | default('all-MiniLM-L6-v2') }}"
+
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+
+existing = [c.name for c in chroma_client.list_collections()]
+if COLLECTION_NAME not in existing:
+    collection = chroma_client.create_collection(
+        name=COLLECTION_NAME,
+        metadata={"hnsw:space": DISTANCE_METRIC}
+    )
+else:
+    collection = chroma_client.get_collection(name=COLLECTION_NAME)
+
+embedding_model = SentenceTransformer(MODEL_NAME, device="cpu")
+
+def upsert_texts(texts: List[str]) -> None:
+    vectors = embedding_model.encode(texts, convert_to_numpy=True).tolist()
+    ids = [str(uuid.uuid4()) for _ in texts]
+    collection.add(documents=texts, embeddings=vectors, ids=ids)
+
+def retrieve(query: str, top_k: int = 5) -> List[str]:
+    query_vec = embedding_model.encode([query], convert_to_numpy=True)[0].tolist()
+    results = collection.query(query_embeddings=[query_vec], n_results=top_k)
+    return results["documents"][0] if results.get("documents") else []
+
+def bootstrap(load_fn):
+    try:
+        if len(collection.get()["ids"]) > 0:
+            return
+    except Exception:
+        pass
+    texts = load_fn()
+    upsert_texts(texts)

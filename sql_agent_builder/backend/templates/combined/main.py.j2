@@ -1,0 +1,31 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+import streamlit as st
+from source import load_data
+from framework import run_agent
+
+st.set_page_config(page_title="AI CSV Agent", layout="wide")
+st.title("Chat with Your Data")
+
+csv_file_path = os.path.join(os.path.dirname(__file__), "data.csv")
+
+if os.path.exists(csv_file_path):
+    df = load_data()
+    st.subheader("Preview of Data")
+    st.dataframe(df.head())
+
+    st.subheader("Ask a question about your data")
+    question = st.text_input("Enter your question:")
+
+    if question:
+        with st.spinner("Generating response..."):
+            try:
+                answer = run_agent(df, question)
+                st.success("Response:")
+                st.write(answer)
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+else:
+    st.error("CSV file not found.")

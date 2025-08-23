@@ -1,0 +1,18 @@
+import pandas as pd
+import sqlite3
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def load_data():
+    try:
+        conn = sqlite3.connect(os.getenv("SQLITE_PATH"))
+        query = "SELECT * FROM {{ config.source_details.table_name }} LIMIT 1000"
+        df = pd.read_sql(query, conn)
+        return df
+    except Exception as e:
+        raise Exception(f"SQLite connection failed: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()

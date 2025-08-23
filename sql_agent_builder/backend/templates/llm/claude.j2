@@ -1,0 +1,32 @@
+# claude.j2
+
+import requests
+
+class ClaudeLLM:
+    def __init__(self, api_key="{{ config.llm_key }}", model="{{ config.llm_model }}", system_prompt="{{ config.system_prompt | default('You are a helpful assistant.') }}"):
+        self.api_key = api_key
+        self.model = model
+        self.system_prompt = system_prompt
+        self.url = "https://api.anthropic.com/v1/messages"
+        self.headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+
+    def call(self, prompt):
+        payload = {
+            "model": self.model,
+            "max_tokens": 1024,
+            "messages": [
+                {"role": "system", "content": self.system_prompt},
+                {"role": "user", "content": prompt}
+            ]
+        }
+
+        response = requests.post(self.url, headers=self.headers, json=payload)
+
+        if response.status_code != 200:
+            raise RuntimeError(f"Claude API call failed ({response.status_code}): {response.text}")
+
+        return response.json()["content"][0]["text"]

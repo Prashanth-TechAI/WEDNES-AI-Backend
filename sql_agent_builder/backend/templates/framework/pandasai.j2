@@ -1,0 +1,30 @@
+import os
+import pandas as pd
+from dotenv import load_dotenv
+from pandasai import SmartDataframe
+from prompt import SYSTEM_PROMPT
+
+load_dotenv()
+
+api_key = os.getenv("LLM_API_KEY") or "{{ config.llm_key }}"
+model_name = "{{ config.llm_model }}"
+
+{% if config.llm_provider == "openai" %}
+from pandasai.llm.openai import OpenAI as LLM
+llm = LLM(api_token=api_key, model_name=model_name)
+
+{% elif config.llm_provider == "groq" %}
+from langchain_groq import ChatGroq as LLM
+llm = LLM(api_key=api_key, model_name=model_name)
+
+{% elif config.llm_provider == "anthropic" %}
+from pandasai.llm.anthropic import Anthropic as LLM
+llm = LLM(api_token=api_key, model_name=model_name)
+
+{% else %}
+raise ValueError("Unsupported LLM provider: {{ config.llm_provider }}")
+{% endif %}
+
+def run_agent(df, question):
+    sdf = SmartDataframe(df, config={"llm": llm, "prompt": SYSTEM_PROMPT})
+    return sdf.chat(question)

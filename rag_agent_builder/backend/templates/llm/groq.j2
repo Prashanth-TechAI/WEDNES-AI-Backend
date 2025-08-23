@@ -1,0 +1,19 @@
+import requests
+
+def ask_llm(system_prompt, context, query):
+    prompt = f"{system_prompt}\n\nContext:\n{context}\n\nQuestion: {query}"
+
+    headers = {
+        "Authorization": "Bearer {{ config.llm.api_key }}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "{{ config.llm.model_name }}",
+        "messages": [
+            {"role": "user", "content": prompt}
+        ]
+    }
+
+    response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=data, headers=headers)
+    response.raise_for_status()
+    return response.json().get("choices", [{}])[0].get("message", {}).get("content", "")

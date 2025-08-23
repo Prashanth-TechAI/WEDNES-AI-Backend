@@ -1,0 +1,12 @@
+# deepseek.j2
+
+from openai import OpenAI
+
+# Initialize the DeepSeek-compatible client using OpenAI SDK
+client = OpenAI(
+    api_key="{{ config.llm_key }}",
+    base_url="https://api.deepseek.com"
+)
+
+MODEL_NAME = "{{ config.llm_model }}"
+SYSTEM_PROMPT = "{{ config.system_prompt | default('You are a helpful assistant.') }}"

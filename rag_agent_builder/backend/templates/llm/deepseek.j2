@@ -1,0 +1,22 @@
+# Auto-generated DeepSeek client (OpenAI-compatible)
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="{{ config.llm.api_key }}",
+    base_url="https://api.deepseek.com"
+)
+
+MODEL_NAME = "{{ config.llm.model_name }}"
+SYSTEM_PROMPT = "{{ config.system_prompt | default('You are a helpful assistant.') }}"
+
+def ask_llm(context: str, question: str) -> str:
+    full_prompt = f"{SYSTEM_PROMPT}\n\nContext:\n{context}\n\nQuestion: {question}"
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": full_prompt}
+        ]
+    )
+    return response.choices[0].message.content.strip()

@@ -1,0 +1,18 @@
+import pandas as pd
+from pymongo import MongoClient
+
+def load_data():
+    try:
+        client = MongoClient("{{ config.source.uri }}")
+        db = client["{{ config.source.database }}"]
+        collection = db["{{ config.source.collection_or_table }}"]
+        
+        data = list(collection.find().limit(1000))
+        for doc in data:
+            doc.pop("_id", None)
+
+        df = pd.DataFrame(data)
+        
+        return df.fillna("").astype(str).apply(lambda row: " ".join(row), axis=1).tolist()
+    except Exception as e:
+        raise Exception(f"MongoDB connection failed: {str(e)}")

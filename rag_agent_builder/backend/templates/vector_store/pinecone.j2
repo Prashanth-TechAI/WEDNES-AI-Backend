@@ -1,0 +1,52 @@
+from uuid import uuid4
+from sentence_transformers import SentenceTransformer
+from pinecone import Pinecone, ServerlessSpec
+
+class PineconeClient:
+    def __init__(self):
+        self.api_key      = "{{ config.vector_store.api_key }}"
+        self.environment  = "{{ config.vector_store.environment }}"
+        self.index_name   = "{{ config.vector_store.index_name | default('') }}"
+        if not self.index_name:
+            self.index_name = f"rag_{uuid4().hex[:8]}"
+        self.pc        = Pinecone(self.api_key)
+        self.dimension = SentenceTransformer("{{ config.embedding.model_name }}").get_sentence_embedding_dimension()
+        self._ensure_index()
+
+    def _ensure_index(self):
+        if self.index_name not in self.pc.list_indexes().names():
+            self.pc.create_index(
+                name     = self.index_name,
+                dimension= self.dimension,
+                metric   = "cosine",
+                spec     = ServerlessSpec(cloud="aws", region=self.environment),
+            )
+        self.index = self.pc.Index(self.index_name)
+
+    def upsert(self, texts: list[str]):
+        embs   = SentenceTransformer("{{ config.embedding.model_name }}").encode(texts, convert_to_numpy=True).tolist()
+        points = [(str(uuid4()), v, {"text": t}) for v, t in zip(embs, texts)]
+        self.index.upsert(vectors=points)
+
+    def query(self, embedding: list[float], top_k: int = 5) -> list[str]:
+        res = self.index.query(vector=embedding, top_k=top_k, include_metadata=True)
+        return [m.metadata["text"] for m in res.matches]
+
+    def describe_index_stats(self):
+        return self.index.describe_index_stats()
+
+    def delete_index(self):
+        self.pc.delete_index(self.index_name)
+
+class EmbeddingModel:
+    def __init__(self):
+        self.model = SentenceTransformer("{{ config.embedding.model_name }}")
+
+    def embed_documents(self, texts):
+        return self.model.encode(texts, convert_to_numpy=True).tolist()
+
+    def embed_query(self, text):
+        return self.model.encode([text], convert_to_numpy=True)[0].tolist()
+
+embedding_model = EmbeddingModel()
+vector_store    = PineconeClient()

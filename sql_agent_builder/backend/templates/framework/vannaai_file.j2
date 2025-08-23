@@ -1,0 +1,120 @@
+import os
+import pandas as pd
+import sqlite3
+from dotenv import load_dotenv
+from vanna.openai import OpenAI_Chat
+from vanna.chromadb import ChromaDB_VectorStore
+import sqlite3
+
+
+{% if config.ui == "streamlit" %}
+import streamlit as st
+{% elif config.ui == "gradio" %}
+import gradio as gr
+{% endif %}
+
+# === Load environment variables ===
+load_dotenv()
+
+# === Vanna AI Setup ===
+class MyVanna(ChromaDB_VectorStore, OpenAI_Chat):
+    def __init__(self, config=None):
+        ChromaDB_VectorStore.__init__(self, config=config)
+        OpenAI_Chat.__init__(self, config=config)
+
+vn = MyVanna(config={
+    'api_key': os.getenv("LLM_API_KEY"),
+    'model': os.getenv("MODEL_NAME", "gpt-4o-mini"),
+    'embedding_model': 'text-embedding-3-small'
+})
+
+SYSTEM_PROMPT = """{{ config.system_prompt | default("You are an AI agent for SQL queries.") }}"""
+
+# === Load data based on source type ===
+def load_data():
+    source_type = "{{ config.source_type }}"
+    file_path = os.getenv("FILE_PATH", "data.csv")
+
+    if source_type == "csv":
+        df = pd.read_csv(file_path)
+    elif source_type == "excel":
+        df = pd.read_excel(file_path, engine="openpyxl")
+    elif source_type == "sqlite":
+        conn = sqlite3.connect(file_path)
+        df = pd.read_sql("SELECT * FROM data", conn)  # Fixed default table
+        conn.close()
+    else:
+        raise ValueError(f"Unsupported source type: {source_type}")
+
+    # Save to temp.db for Vanna
+    temp_db = "temp.db"
+    conn = sqlite3.connect(temp_db)
+    df.to_sql("data", conn, if_exists="replace", index=False)
+    conn.close()
+
+    vn.connect_to_sqlite(temp_db)
+
+    schema = "Table 'data' has the following columns: " + ", ".join(
+        [f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes)]
+    ) + "."
+    vn.train(documentation=schema)
+
+    return df
+
+# === Query handler ===
+def run_agent(df, question):
+    sql = vn.generate_sql(question)
+    return vn.run_sql(sql)
+
+# === Streamlit UI ===
+{% if config.ui == "streamlit" %}
+def main():
+    st.set_page_config(page_title="AI Data Agent", layout="wide")
+    st.title("Chat with Your Data")
+
+    data_file = os.getenv("FILE_PATH", "data.csv")
+
+    if os.path.exists(data_file):
+        df = load_data()
+        st.subheader("Preview of Data")
+        st.dataframe(df.head())
+
+        st.subheader("Ask a question about your data")
+        question = st.text_input("Enter your question:")
+
+        if question:
+            with st.spinner("Generating response..."):
+                try:
+                    answer = run_agent(df, question)
+                    st.success("Response:")
+                    st.dataframe(answer)
+                except Exception as e:
+                    st.error(f"An error occurred: {e}")
+    else:
+        st.error(f"{data_file} file not found.")
+
+if __name__ == "__main__":
+    main()
+{% endif %}
+
+# === Gradio UI ===
+{% if config.ui == "gradio" %}
+def ask_question(question):
+    try:
+        df = load_data()
+        result = run_agent(df, question)
+        return result.to_markdown()
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+def start_ui():
+    iface = gr.Interface(fn=ask_question, inputs="text", outputs="markdown", title="Vanna AI SQL Agent")
+    iface.launch(server_port=7860, server_name="0.0.0.0", share=False)
+
+if __name__ == "__main__":
+    start_ui()
+{% endif %}
+
+
+
+import sqlite3

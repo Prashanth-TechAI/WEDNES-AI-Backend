@@ -19,7 +19,7 @@
 
 
 <p align="center">
-  <img src="./content/logo.jpg" alt="WEDNES AI Logo" width="200">
+  <img src="./content/logo.jpg" alt="WEDNES AI Logo" width="350">
 </p>
 
 ---
@@ -338,7 +338,7 @@ Image Agent APIs → http://localhost:8000/img/docs
     <sub><b>GODITI BHASKAR</b></sub>
   </a>
   <br/>
-  <sub>Co-Devloper</sub>
+  <sub>Co-Developer</sub>
 </p>
 
 

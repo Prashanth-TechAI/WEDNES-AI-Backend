@@ -51,7 +51,7 @@
 ### 1. Clone the Repository
 ```bash
 git https://github.com/Prashanth-TechAI/WEDNES-AI-Backend.git
-cd WEDNES_AI_FRONTEND
+cd WEDNES_Backend
 ```
 
 

@@ -43,8 +43,9 @@
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
-- Nodejs
+- Python 3.10 +
 - pip package manager
+-All Required Dependencies
 
 
 ### 1. Clone the Repository
